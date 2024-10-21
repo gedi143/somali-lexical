@@ -22,7 +22,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # MySQL configurations
 mysql_config = {
-    'host': 'localhost',
+    'host': '172.16.1.245',
     'user': 'root',
     'password': '',
     'database': 'part_of_speech'
@@ -667,7 +667,6 @@ def add_user():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/edit_user/<int:user_id>', methods=['POST'])
 @role_required('Admin')
 def edit_user(user_id):
@@ -725,7 +724,6 @@ def edit_user(user_id):
         logging.error(f"Error editing user: {e}")
         return jsonify({'error': f"Error: {str(e)}"}), 500
 
-
 @app.route('/delete_user/<int:user_id>', methods=['DELETE'])
 @role_required('Admin')
 def delete_user(user_id):
@@ -772,6 +770,25 @@ def get_all_qeybaha_hadalka():
 
     return jsonify(data)
 
+@app.route('/getDerivativeWords/<int:root_word_id>', methods=['GET'])
+def get_derivative_words(root_word_id):
+    if 'id' not in session:
+        return jsonify({'error': 'User not logged in'}), 403
+
+    user_role = session.get('userRole')
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Fetch derivative words where Asalka_ereyga equals the root word ID
+    cursor.execute("SELECT Erayga FROM erayga_hadalka WHERE Asalka_erayga = %s", (root_word_id,))
+    
+    data = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    # Return the list of derivative words
+    return jsonify(data)
 
 @app.route('/readInfo/<int:id>', methods=['GET'])
 @role_required('Admin', 'Moderator')
@@ -886,8 +903,6 @@ def delete_qeybaha_hadalka(id):
 
     return jsonify({'message': 'Record deleted successfully'})
 
-
-
 @app.route('/asalka_ereyada')
 def asalka_ereyada():
     if 'username' not in session:
@@ -928,8 +943,6 @@ def get_all_asalka_ereyada():
     conn.close()
 
     return jsonify({'data': data, 'total_records': total_records})
-
-
 
 @app.route('/readInfoAsalka/<int:id>', methods=['GET'])
 def get_asalka_ereyada(id):
@@ -996,7 +1009,6 @@ def update_asalka_ereyada(id):
     conn.close()
     return jsonify({'message': 'Record updated successfully'})
 
-
 @app.route('/deleteAsalka/<int:id>', methods=['DELETE'])
 def delete_asalka_ereyada(id):
     conn = get_db_connection()
@@ -1006,7 +1018,6 @@ def delete_asalka_ereyada(id):
     cursor.close()
     conn.close()
     return jsonify({'message': 'Record deleted successfully'})
-
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -1139,7 +1150,6 @@ def get_all_erayga_hadalka():
     conn.close()
     return jsonify(data)
 
-
 # @app.route('/readInfoErayga/<int:id>', methods=['GET'])
 # def get_erayga_hadalka(id):
 #     if 'id' not in session:
@@ -1227,7 +1237,6 @@ def get_erayga_hadalka(id):
         'asalka_options': asalka_options  # Return all Asalka_erayga options
     })
 
-
 @app.route('/createErayga', methods=['POST'])
 def create_erayga_hadalka():
     if 'id' not in session:
@@ -1288,7 +1297,6 @@ def create_erayga_hadalka():
     return jsonify({
         'message': f'Record created successfully with {inserted_count} words inserted.'
     }), 201
-
 
 @app.route('/updateErayga/<int:id>', methods=['PUT'])
 def update_erayga_hadalka(id):
@@ -1386,6 +1394,62 @@ def update_erayga_hadalka(id):
         'message': f'Updated words successfully!.'
     }), 200
 
+@app.route('/updateMultiple', methods=['PUT'])
+def update_multiple_derivative_words():
+    if 'id' not in session:
+        return jsonify({'error': 'User not logged in'}), 403
+
+    user_role = session['userRole']
+    user_id = session['id']
+    print(request.json)
+    # Get the update data from the request
+    update_data = request.json
+    Nooca_erayga = update_data.get('Nooca_erayga')
+    Qeybta_hadalka = update_data.get('Qeybta_hadalka')
+    Asalka_erayga = update_data.get('Asalka_erayga')
+    derivativeWords = update_data.get('derivativeWords')  # Changed to match the form field
+
+    # Validate required fields
+    if not Nooca_erayga or not Qeybta_hadalka or not Asalka_erayga or not derivativeWords:
+        return jsonify({'error': 'All fields are required.'}), 400
+
+    # Split the derivative words into a list
+    derivative_words = [word.strip() for word in derivativeWords.split(',') if word.strip()]
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    if user_role == 'User':
+        cursor.execute("SELECT userId FROM erayga_hadalka WHERE Asalka_erayga = %s", (Asalka_erayga,))
+        record = cursor.fetchone()
+        if not record or record['userId'] != user_id:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Permission denied: You can only update your own records'}), 403
+
+    # Delete existing records with the same Asalka_erayga
+    cursor.execute("DELETE FROM erayga_hadalka WHERE Asalka_erayga = %s", (Asalka_erayga,))
+    deleted_count = cursor.rowcount
+
+    # Insert new derivative words
+    inserted_count = 0
+    for word in derivative_words:
+        cursor.execute(
+            "INSERT INTO erayga_hadalka (Erayga, Nooca_erayga, Qeybta_hadalka, Asalka_erayga, userId) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (word, Nooca_erayga, Qeybta_hadalka, Asalka_erayga, user_id)
+        )
+        inserted_count += 1
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({
+        'message': 'Records updated successfully.',
+        'details': f'{deleted_count} old records deleted, {inserted_count} new records inserted.'
+    }), 200
+
 @app.route('/deleteErayga/<int:id>', methods=['DELETE'])
 def delete_erayga_hadalka(id):
     if 'id' not in session:
@@ -1417,7 +1481,6 @@ def delete_erayga_hadalka(id):
     cursor.close()
     conn.close()
     return jsonify({'message': 'Record deleted successfully'}), 200
-
 
 @app.route('/reports')
 def reports():
@@ -1580,6 +1643,7 @@ def ereyada_reports():
     if 'username' not in session:
         return redirect(url_for('login'))
     return render_template('ereyadaReports.html')
+
 @app.route('/report', methods=['GET'])
 def report():
     if 'id' not in session:
