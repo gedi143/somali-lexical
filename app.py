@@ -770,8 +770,8 @@ def get_all_qeybaha_hadalka():
 
     return jsonify(data)
 
-@app.route('/getDerivativeWords/<int:root_word_id>', methods=['GET'])
-def get_derivative_words(root_word_id):
+@app.route('/getDerivativeWords/<int:root_word_id>/<int:qeybta_hadalka_id>', methods=['GET'])
+def get_derivative_words(root_word_id, qeybta_hadalka_id):
     if 'id' not in session:
         return jsonify({'error': 'User not logged in'}), 403
 
@@ -780,8 +780,13 @@ def get_derivative_words(root_word_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Fetch derivative words where Asalka_ereyga equals the root word ID
-    cursor.execute("SELECT Erayga FROM erayga_hadalka WHERE Asalka_erayga = %s", (root_word_id,))
+    # Fetch derivative words where Asalka_erayga equals the root word ID and Qeybta_hadalka matches the provided ID
+    query = """
+        SELECT Erayga 
+        FROM erayga_hadalka 
+        WHERE Asalka_erayga = %s AND Qeybta_hadalka = %s
+    """
+    cursor.execute(query, (root_word_id, qeybta_hadalka_id))
     
     data = cursor.fetchall()
     cursor.close()
@@ -1402,12 +1407,13 @@ def update_multiple_derivative_words():
     user_role = session['userRole']
     user_id = session['id']
     print(request.json)
+    
     # Get the update data from the request
     update_data = request.json
     Nooca_erayga = update_data.get('Nooca_erayga')
     Qeybta_hadalka = update_data.get('Qeybta_hadalka')
     Asalka_erayga = update_data.get('Asalka_erayga')
-    derivativeWords = update_data.get('derivativeWords')  # Changed to match the form field
+    derivativeWords = update_data.get('derivativeWords')
 
     # Validate required fields
     if not Nooca_erayga or not Qeybta_hadalka or not Asalka_erayga or not derivativeWords:
@@ -1419,16 +1425,23 @@ def update_multiple_derivative_words():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    # Ensure that only the record owner can update it
     if user_role == 'User':
-        cursor.execute("SELECT userId FROM erayga_hadalka WHERE Asalka_erayga = %s", (Asalka_erayga,))
+        cursor.execute(
+            "SELECT userId FROM erayga_hadalka WHERE Asalka_erayga = %s AND Qeybta_hadalka = %s",
+            (Asalka_erayga, Qeybta_hadalka)
+        )
         record = cursor.fetchone()
         if not record or record['userId'] != user_id:
             cursor.close()
             conn.close()
             return jsonify({'error': 'Permission denied: You can only update your own records'}), 403
 
-    # Delete existing records with the same Asalka_erayga
-    cursor.execute("DELETE FROM erayga_hadalka WHERE Asalka_erayga = %s", (Asalka_erayga,))
+    # Delete existing records that match both Asalka_erayga and Qeybta_hadalka
+    cursor.execute(
+        "DELETE FROM erayga_hadalka WHERE Asalka_erayga = %s AND Qeybta_hadalka = %s",
+        (Asalka_erayga, Qeybta_hadalka)
+    )
     deleted_count = cursor.rowcount
 
     # Insert new derivative words

@@ -286,41 +286,50 @@ $(document).ready(function () {
         $("#editAsalka_erayga, #updateAsalka_erayga").html(options);
 
         // Add event listener for the root word selection in the "Update Multiple" modal
-        $("#updateAsalka_erayga").on("change", function () {
-          const rootWordId = $(this).val();
-          if (rootWordId !== "") {
-            fetchDerivativeWords(rootWordId);
-          } else {
-            $("#derivativeWordsTextarea").val(""); // Clear if no root word selected
+        $("#updateAsalka_erayga, #updateQeybta_hadalka").on(
+          "change",
+          function () {
+            const rootWordId = $("#updateAsalka_erayga").val();
+            const partOfSpeechId = $("#updateQeybta_hadalka").val();
+
+            if (rootWordId !== "" && partOfSpeechId !== "") {
+              fetchDerivativeWords(rootWordId, partOfSpeechId);
+            } else {
+              $("#derivativeWordsTextarea").val(""); // Clear if no root word or part of speech selected
+            }
           }
-        });
+        );
       }).fail(function (error) {
         console.error("Error fetching Root Word options:", error);
       });
     }
 
-    // Function to fetch and populate derivative words based on the selected root word
-    function fetchDerivativeWords(rootWordId) {
-      $.get(`/getDerivativeWords/${rootWordId}`, function (data) {
-        let derivatives = data.map((item) => item.Erayga).join(", ");
-        $("#derivativeWordsTextarea").val(derivatives); // Populate the textarea with derivative words
-      }).fail(function (error) {
+    // Function to fetch and populate derivative words based on the selected root word and part of speech
+    function fetchDerivativeWords(rootWordId, partOfSpeechId) {
+      $.get(
+        `/getDerivativeWords/${rootWordId}/${partOfSpeechId}`,
+        function (data) {
+          let derivatives = data.map((item) => item.Erayga).join(", ");
+          $("#derivativeWordsTextarea").val(derivatives); // Populate the textarea with derivative words
+        }
+      ).fail(function (error) {
         console.error("Error fetching derivative words:", error);
       });
     }
   });
+
   // Handle form submission for updating multiple derivative words
   $("#updateMultipleForm").submit(function (event) {
     event.preventDefault();
-  
+
     const formDataObject = {};
-  
+
     // Get values from the form
     const noocaErayga = $("#updateNooca_erayga").val();
     const qeybtaHadalka = $("#updateQeybta_hadalka").val();
     const asalkaErayga = $("#updateAsalka_erayga").val();
     const derivativeWords = $("#derivativeWordsTextarea").val();
-  
+
     // Validate form inputs
     if (!noocaErayga) {
       Swal.fire(
@@ -354,14 +363,14 @@ $(document).ready(function () {
       );
       return;
     }
-  
+
     // Serialize form data to JSON
     $(this)
       .serializeArray()
       .forEach((field) => {
         formDataObject[field.name] = field.value;
       });
-  
+
     // Confirmation dialog before submitting
     Swal.fire({
       title: "Are you sure?",
@@ -383,16 +392,16 @@ $(document).ready(function () {
           success: function (data) {
             // Close the modal on success
             $("#updateMultipleModal").modal("hide");
-  
+
             // Optional: Refresh table or page
             fetchEraygaHadalka(); // Replace with appropriate function to refresh records
-  
+
             // Display success message
             Swal.fire("Success", data.message, "success");
-  
+
             // Clear form fields
             $("#updateMultipleForm")[0].reset(); // Reset the form fields to default
-            $("#derivativeWordsTextarea").val(''); // Clear the textarea specifically
+            $("#derivativeWordsTextarea").val(""); // Clear the textarea specifically
           },
           error: function (xhr) {
             // Handle error response
@@ -405,7 +414,7 @@ $(document).ready(function () {
         });
       }
     });
-  });  
+  });
 
   // Handle deleting Erayga Hadalka
   $(document).on("click", ".delete-item", function () {
